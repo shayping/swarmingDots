@@ -343,7 +343,6 @@ S.UI.Tabs = (function () {
 
   function init() {
     activate(0);
-    bindEvents();
   }
 
   // Init
@@ -725,103 +724,7 @@ S.Shape = (function () {
 }());
 
 
-S.init();
-
-
-
-
-
-
-// =============================================================================
-
-// Dot matrix-esque renderer
-var D = {
-  init: function () {
-
-    S.Drawing.init('.canvas');
-    
-    
-    
-    
-    document.body.classList.add('body--ready');
-
-    if (i !== -1) {
-      S.UI.simulate(decodeURI(action).substring(i + 3));
-    } else {
-//      S.UI.simulate('Shape|Shifter|Type|to start|#rectangle|#countdown 3||');
-        S.ShapeBuilder.imageFile('contemplate.png', 
-            function(c){
-                S.Shape.switchShape(c)
-            })
-    }
-
-    S.Drawing.loop(function () {
-      S.Shape.render();
-    });
-  }
-};
-
-
-D.Display = (function() {
-  var canvas,
-      context,
-      renderFn,
-      requestFrame = window.requestAnimationFrame       ||
-                     window.webkitRequestAnimationFrame ||
-                     window.mozRequestAnimationFrame    ||
-                     window.oRequestAnimationFrame      ||
-                     window.msRequestAnimationFrame     ||
-                     function(callback) {
-                       window.setTimeout(callback, 1000 / 60);
-                     };
-  return {
-    init: function (el) {
-      canvas = document.querySelector(el);
-      context = canvas.getContext('2d');
-      this.adjustCanvas();
-
-      window.addEventListener('resize', function (e) {
-        D.Display.adjustCanvas();
-      });
-    },
-    
-    loop: function (fn) {
-      renderFn = !renderFn ? fn : renderFn;
-      this.clearFrame();
-      renderFn();
-      requestFrame.call(window, this.loop.bind(this));
-    },
-
-    adjustCanvas: function () {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    },
-
-    clearFrame: function () {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-    },
-
-    getArea: function () {
-      return { w: canvas.width, h: canvas.height };
-    },
-
-    drawCircle: function (p, c) {
-      context.fillStyle = c.render();
-      context.beginPath();
-      context.arc(p.x, p.y, p.z, 0, 2 * Math.PI, true);
-      context.closePath();
-      context.fill();
-    }
-  }
-}());
-
-D.Point = function(args) {
-  this.x = args.x;
-  this.y = args.y;
-  this.z = args.z;
-  this.a = args.a;
-  this.h = args.h;
-};
+//S.init();
 
 
 
