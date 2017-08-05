@@ -89,36 +89,45 @@ D.Color.prototype = {
 
 
 // -----------------------------------------------------------------------------
-// Base class for renderable pixels
-D.Pixel = function(x,y,c) {
-  // Represents a "point" ths the display. Like a pixel.
+// A single pixel 
+D.dot = 0;
+D.hex = 1;
+D.HexAngles = function() {
+  var a = [ [Math.cos(0), Math.sin(0)] ];
+  for (var s=0; s < 7; s++){
+    a.push([Math.cos(s*2*Math.PI/6), Math.sin(s*2*Math.PI/6)]);
+  }
+  return a;
+}();
+
+D.Pixel = function(type, x, y, r, c) {
+  // type = D.Dot, D.Hex 
+  // x,y = center of pixel
+  // r = radius 
+  // c = D.color of pixel
   this.x = x;
   this.y = y;
-  this.color = c ? c : new D.Color(255,255,255,0.8);
- 
-};
-
-
-D.Dot = function (x, y, r) {
-  D.Pixel.call(this,x,y);
+  this.c = c ? c : new D.Color(255,255,255,0.8);
+  this.r = r;
+  this.type = type;
   
-  this.radius = r; 
-
   this.nextPoint = {x:this.x, y:this.y};
-  this.actionQ = []; 
+  this.actionQ = [];
   this.talomere = -1;
-};
+}
 
-D.Dot.prototype = {
+D.Pixel.prototype = {
   move: function(p) {
     // Queue up the request to move to position defined by p  
     this.actionQ.push({x: p.x, y: p.y});
     
-    // If move is not give retiredPixel, make sure to reset talomere
-    if (p instanceof D.Dot) {
+    // Move could be either jsut x,y, or a Pixel. If it is the latter just
+    // clone the value, probably I want to retire the pixel by setting talomere
+    if (p instanceof D.Pixel) {
       this.talomere = p.talomere;
-      this.radius = p.radius;
-      this.color = p.color;
+      this.r = p.r;
+      this.c = p.c;
+      this.type = p.type;
     }
   },
   
@@ -130,7 +139,7 @@ D.Dot.prototype = {
   },
   
   distanceTo: function(p) {
-    // calculates the distance from this Dot to the point p
+    // calculates the distance from this pixel to the point p
     // Expects p to have .x and .y
     var dx = this.x - p.x,
         dy = this.y - p.y,
@@ -138,12 +147,25 @@ D.Dot.prototype = {
     return {dx:dx, dy:dy, d:d};    
   },
   
-  
   _draw: function() {
     D.Display.drawPixel(function(context) {
-      context.fillStyle = this.color.render();
+      context.fillStyle = this.c.render();
       context.beginPath();
-      context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, true);
+      switch (this.type) {
+        case D.hex:
+          context.moveTo(this.x + this.r * D.HexAngles[0][0], 
+                         this.y + this.r * D.HexAngles[0][1]);
+          for (var n=1; n<8; n++) {
+            context.lineTo(this.x + this.r * D.HexAngles[n][0], 
+                         this.y + this.r * D.HexAngles[n][1]);
+          }
+          break;
+          
+        case D.dot:
+        default:
+          context.arc(this.x, this.y, this.r, 0, 2 * Math.PI, true);
+          break;
+      }
       context.closePath(); 
       context.fill();
     }.bind(this))
@@ -197,7 +219,9 @@ D.Dot.prototype = {
   
 };
 
-// ------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Collecting a swarm of pixels into an 2D object
 
 D.SwarmBuilder = (function() {
@@ -211,9 +235,9 @@ D.SwarmBuilder = (function() {
 
   var _fontFamily = 'Lato, Helvetica Neue, Helvetica, Arial, sans-serif';      
       
-  // I want to sub sample the canvas since each D.Pixel drawn on D.Display will
-  // be bigger than 1 screen pixel. The subsampling is related to the D.Pixel size.
-  var radius = 3;
+  // Step across the bitimage of the canvas to subsample down into 
+  // a pixelated approximation of the canvas
+  var radius = 5;
   var sample = (radius * 2) + 2;
  
   
@@ -248,8 +272,6 @@ D.SwarmBuilder = (function() {
     var pixelLocs = [],
         x = 0,
         y = 0;
-        
-    //console.log('Using sample:'+sample);
     
     for (var n = 0; n < data.length; n += (4*sample) ) {
       var r = data[n],
@@ -309,14 +331,18 @@ D.SwarmBuilder = (function() {
 }());
 
 
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 D.Swarm = (function() {
   var pixels = [];
+  var type = D.hex;
   
   function _birthPixel() {
     var dim = D.Display.getDimensions();
     var x = Math.random() * dim.w;
     var y = Math.random() * dim.h;
-    return new D.Dot(x,y, D.SwarmBuilder.getRadius());
+    return new D.Pixel(type, x, y, D.SwarmBuilder.getRadius());
   }
   
   function _retirePixel() {
@@ -324,8 +350,7 @@ D.Swarm = (function() {
     var x = Math.random() * dim.w;
     var y = Math.random() * dim.h;
     var r = Math.random() * 20 + D.SwarmBuilder.getRadius()/2;
-    var d = new D.Dot(x,y,r);
-    d.color = new D.Color(78,108,68, Math.random() * 0.2);
+    var d = new D.Pixel(type, x, y, r, new D.Color(78,108,68, Math.random() * 0.2));
     d.talomere = Math.floor(Math.random() * 200) + 100;
     
     return d;
@@ -351,7 +376,7 @@ D.Swarm = (function() {
     
     updateRadius: function(r) {
       D.SwarmBuilder.setRadius(r);
-      pixels.map(p => p.radius = r);
+      pixels.map(p => p.r = r);
     },
     
     
@@ -366,6 +391,10 @@ D.Swarm = (function() {
       var create = 0;
       var retire = 0;
       var t;
+      
+      // Reorder the pixels so the swarming looks more random
+      pixels.sort(function(a,b) {  return (Math.random() > 0.5 ? 1 : -1) }); 
+      pixels.sort(function(a,b) {  return (Math.random() > 0.5 ? 1 : -1) });
       
       if (l < pixels.length) {
         // There are more pixels than I need on screen
@@ -392,6 +421,20 @@ D.Swarm = (function() {
           t.move(swarm[n]);
         }
       }
+      //console.log('rendering ' + pixels.length + ' elements');
+    },
+    
+    pulse: function(cb) {
+      var newRadius = D.SwarmBuilder.getRadius() * 1.7;
+      function pop(r) {
+        pixels.map(p => p.r = r);
+      };
+      pop(newRadius);
+      window.setTimeout(
+        function(){
+          pop(D.SwarmBuilder.getRadius());
+          if (cb) cb();
+        }, 300);
     },
     
     text: function(t) {
@@ -402,7 +445,7 @@ D.Swarm = (function() {
     img: function(url, cb) {
       if (cb) {
         D.SwarmBuilder.buildImg(url, function(s) {
-          D.Swarm.configureSwarm(s);cb()
+          D.Swarm.configureSwarm(s);cb();
         });
       } else {
         D.SwarmBuilder.buildImg(url, D.Swarm.configureSwarm);
@@ -431,16 +474,22 @@ D.Scripts = (function() {
         break;
       case 'img' : 
         D.Swarm.img(scripts[index].value, function() {
-        if (index <= scripts.length)
+          if (index <= scripts.length)
           window.setTimeout(function() {_run()}, timeout);
-        });  
+        });
         break;
       case 'size': 
         D.Swarm.updateRadius(scripts[index].value);
         if (index <= scripts.length)
           window.setTimeout(function() {_run()}, timeout);
         break;
-       case 'enable':
+      case 'pulse':
+        D.Swarm.pulse(function(){
+          if (index <= scripts.length)
+            window.setTimeout(function() {_run()}, timeout);
+        });
+        break;
+      case 'enable':
          document.body.addEventListener('keydown', function (e) {
            var input = document.querySelector('.ui-input')
            input.focus();
@@ -451,6 +500,7 @@ D.Scripts = (function() {
           });
           break;
     }
+    
     index +=1;
     
   }
@@ -478,20 +528,18 @@ D.init();
 D.Scripts.run([
   {cmd: 'text', value:'Hello'},
   {cmd: 'text', value:"It's me"},
-  {cmd: 'size', value:8, timeout:300},
-  {cmd: 'img', value:'./sps.png'},
   {cmd: 'size', value:4, timeout:300},
   {cmd: 'img', value:'./sps.png'},
-  {cmd: 'size', value:1, timeout:300},
-  {cmd: 'img', value:'./sps.png', timeout:7000},
-  {cmd: 'size', value:3, timeout:100},
+  {cmd: 'size', value:6, timeout:300},
   {cmd: 'text', value:"So..."},
+  {cmd: 'size', value:4, timeout:300},
   {cmd: 'text', value:"Here's wishing you"},
+  {cmd: 'pulse'},
   {cmd: 'text', value:'Happy Birthday!', timeout:5000},
-  {cmd: 'size', value:1, timeout:300},
+  {cmd: 'size', value:2, timeout:300},
   {cmd: 'text', value:'<(oo)> '},
   {cmd: 'img', value:'./djw4.png',timeout:10000},
-  {cmd: 'size', value:3, timeout:5000},
+  {cmd: 'size', value:4, timeout:5000},
   {cmd: 'text', value:'Type...'},
   {cmd: 'enable'}
   ]);
