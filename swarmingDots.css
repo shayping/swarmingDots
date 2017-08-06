@@ -7,15 +7,26 @@ body {
   line-height: 1.5em;
 }
 
-h1 {
-  color: #111;
+div.button {
+  color: #EEE;
   margin: 0 0 12px 0;
   font-size: 24px;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid;
+  border-radius :3px;
+  width: fit-content;
+  display: block;
+  margin: auto;
+  padding: 10px;
+  background: #AB3809;
 }
 
-p {
-  margin: 0 0 10x 0;
+
+.hidden {
+  display: none;
 }
+
 
 .ready {
   background: -webkit-linear-gradient(top, #e4e4d9 0%, #215f00 120%);

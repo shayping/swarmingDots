@@ -8,9 +8,7 @@ var D = {
     // Perform any resource loading prior to calling init.
     
     D.Display.init('.canvas');
-    document.body.classList.remove('loader');
-    document.body.classList.add('ready');
-
+   
     D.Display.render(function () {
       D.Swarm.render();
     });
@@ -640,7 +638,7 @@ D.Scripts = (function() {
 
 
 // ----------------------------------------------------------------------------
-function ready() {
+function play() {
   D.init();
 
   D.Scripts.run([
@@ -695,6 +693,21 @@ function ready() {
   
 }
 
+
+function ready() {
+    // Enable the play link
+    var start = document.querySelector('.start');
+    start.addEventListener('click', function (e) {
+        start.classList.add('hidden');
+        play();
+    });
+    
+    start.classList.remove('hidden');
+     document.body.classList.remove('loader');
+    document.body.classList.add('ready');
+
+}
+
 function start() {
 D.Scripts.load([
   {cmd:'audio',id:'track',url:'./Beethoven_7_2.mp3' },
@@ -708,4 +721,4 @@ D.Scripts.load([
 ], ready);
 }
 
-start()
+start();
