@@ -5,8 +5,11 @@
 
 var D = {
   init: function () {
+    // Perform any resource loading prior to calling init.
+    
     D.Display.init('.canvas');
-    document.body.classList.add('body--ready');
+    document.body.classList.remove('loader');
+    document.body.classList.add('ready');
 
     D.Display.render(function () {
       D.Swarm.render();
@@ -107,28 +110,51 @@ D.Pixel = function(type, x, y, r, c) {
   // c = D.color of pixel
   this.x = x;
   this.y = y;
-  this.c = c ? c : new D.Color(255,255,255,0.8);
+  this.defaultColor = new D.Color(255,255,255,0.8);
+  this.c = c ? c : this.defaultColor;
   this.r = r;
   this.type = type;
   
   this.nextPoint = {x:this.x, y:this.y};
   this.actionQ = [];
   this.talomere = -1;
+  
+  // Rougly how many ms I want transitons from src to dest to be
+  // assuming browser can keep up with 60fps
+  // Filled in by _animationSteps()
+  this.transitonDelta = 1000;
+  this.frameBudget = 0;
+  this.transitionDxDy = [];
+  this.wobble=[0,0];
 }
 
 D.Pixel.prototype = {
   move: function(p) {
-    // Queue up the request to move to position defined by p  
-    this.actionQ.push({x: p.x, y: p.y});
+    // I want to have the movement from origin to destination to take 
+    // roughly the same number of iterations for each pixel, +- a small twiddle
+    // This makes it easier to time transitions. 
+    // Assume browser can keepup with 60fps
+    p.frameBudget = Math.max(Math.floor((this.transitonDelta / 1000.0) * 60),2);
+    
+    // Queue up the request to move to position defined by p 
+    this.actionQ.push({x: p.x, y: p.y, frameBudget: p.frameBudget});
     
     // Move could be either jsut x,y, or a Pixel. If it is the latter just
     // clone the value, probably I want to retire the pixel by setting talomere
     if (p instanceof D.Pixel) {
       this.talomere = p.talomere;
       this.r = p.r;
-      this.c = p.c;
+      //this.c = p.c;
       this.type = p.type;
+      this.frameBudget = p.frameBudget;
     }
+    
+    if (p.hasOwnProperty('c')) {
+      this.c = p.c;
+    } else {
+      this.c = this.defaultColor;
+    }
+    
   },
   
   render: function() {
@@ -149,21 +175,24 @@ D.Pixel.prototype = {
   
   _draw: function() {
     D.Display.drawPixel(function(context) {
+      var x = this.x + this.wobble[0];
+      var y = this.y + this.wobble[1];
+      
       context.fillStyle = this.c.render();
       context.beginPath();
       switch (this.type) {
         case D.hex:
-          context.moveTo(this.x + this.r * D.HexAngles[0][0], 
-                         this.y + this.r * D.HexAngles[0][1]);
+          context.moveTo(x + this.r * D.HexAngles[0][0], 
+                         y + this.r * D.HexAngles[0][1]);
           for (var n=1; n<8; n++) {
-            context.lineTo(this.x + this.r * D.HexAngles[n][0], 
-                         this.y + this.r * D.HexAngles[n][1]);
+            context.lineTo(x + this.r * D.HexAngles[n][0], 
+                           y + this.r * D.HexAngles[n][1]);
           }
           break;
           
         case D.dot:
         default:
-          context.arc(this.x, this.y, this.r, 0, 2 * Math.PI, true);
+          context.arc(x, y, this.r, 0, 2 * Math.PI, true);
           break;
       }
       context.closePath(); 
@@ -171,34 +200,46 @@ D.Pixel.prototype = {
     }.bind(this))
   },
   
-  _easeFactor: function(dist) {
-    if (dist.d > 400) return 20;
-    if (dist.d > 300) return 10;
-    if (dist.d > 200) return 8;
-    if (dist.d > 50) return 4;
-    if (dist.d > 20) return 1.5;
-    if (dist.d > 8) return 1;
-    return 0.7;
+  
+  _animationSteps: function(p) {
+    // make all the animation steps from src to p,
+    // plus or minus a little twiddle so things don't look so ridgid
+    var steps = p.frameBudget + Math.floor((Math.random() - 0.5) * 30);
+    var dist = this.distanceTo(p);
+    var xd = Math.PI/2/steps;
+    var yd = Math.PI/2/steps;
+    this.transitionDxDy = [];
+    for (var n=5; n<steps; n++) {
+      var nx = Math.sin(n * xd) * dist.dx;
+      var ny = Math.sin(n * yd) * dist.dy;
+      this.transitionDxDy.push([
+        this.x - nx,
+        this.y - ny,
+      ]);
+    }
   },
   
-  _shouldIStay: function(p) {
+
+  _shouldIStay: function() {
     // Or should I go now? If I go there will be trouble, 
     // if I stay I will just wobble.
-    var dist = this.distanceTo(p);
-    
-    if (dist.d > 1) {
-      var dxd = (dist.dx / dist.d);
-      var dyd = (dist.dy / dist.d);
-      this.x -= (dxd * this._easeFactor(dist));
-      this.y -= (dyd * this._easeFactor(dist));
+    var nextFrame = this.transitionDxDy.shift();
+    if (nextFrame) {
+      this.x = nextFrame[0]; this.y = nextFrame[1];
+      this.wobble = [0,0];
       return false;
+    } else {
+      // No more work! 
+      // Time to wobble
+      this.wobble = [
+        Math.cos((Math.random()-0.5) * Math.PI),
+        Math.cos((Math.random()-0.5) * Math.PI)
+      ];
+      
+      return true;
     }
-    
-    // wobbling
-    this.x += Math.cos((Math.random()-0.5) * Math.PI);
-    this.y += Math.cos((Math.random()-0.5) * Math.PI);
-    return true;
   },
+  
   
   _update: function() {
     if (this._shouldIStay(this.nextPoint)) {
@@ -207,6 +248,7 @@ D.Pixel.prototype = {
       var p = this.actionQ.shift();
       if (p) {
         this.nextPoint = p;
+        this._animationSteps(p);
       } else {
         // Some wobbling already added by shouldIStay()
       }
@@ -223,7 +265,7 @@ D.Pixel.prototype = {
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // Collecting a swarm of pixels into an 2D object
-
+// SwarmBuilder is used to organize swarms of pixels into a pattern of some sort
 D.SwarmBuilder = (function() {
   // SwarmBuilder is used to return a data structure that tells you how many
   // D.Pixel objects you need, and how ot organize them.
@@ -248,7 +290,6 @@ D.SwarmBuilder = (function() {
   function _resize() {
     _canvas.width = Math.floor(window.innerWidth / sample) * sample;
     _canvas.height = Math.floor(window.innerHeight / sample) * sample;
-    console.log('')
   }
   
   function _fitText(t) {
@@ -266,7 +307,7 @@ D.SwarmBuilder = (function() {
       _context.clearRect(0,0,_canvas.width, _canvas.height);
   }
   
-  function _getSwarm() {
+  function _getSwarm(withColour) {
     // Returns an array of [ {x,y} ]
     var data = _context.getImageData(0,0, _canvas.width, _canvas.height).data;
     var pixelLocs = [],
@@ -279,7 +320,10 @@ D.SwarmBuilder = (function() {
           b = data[n+2],
           a = data[n+3];
       if (a > 0) {
-        pixelLocs.push( {x: x, y: y} );
+        if (withColour){
+          pixelLocs.push( {x: x, y: y, c: new D.Color(r,g,b,a/255.0)} );
+        } else 
+          pixelLocs.push( {x: x, y: y} );
       }
         
       x += sample;
@@ -310,14 +354,11 @@ D.SwarmBuilder = (function() {
       return _getSwarm();
     },
     
-    buildImg: function(url, cb) {
+    loadAndBuildImg: function(url, cb) {
       // Loading of image is async, so need to take in a callback to return 
       var image = new Image();
       image.onload = function() {
-          var dim = D.Display.getDimensions();
-          _clear();
-          _context.drawImage(this,0,0,dim.h * 0.75, dim.h *0.75);
-          cb(_getSwarm());
+        cb(D.SwarmBuilder.buildImg(this));  
       };
       
       image.onerror = function() {
@@ -325,6 +366,13 @@ D.SwarmBuilder = (function() {
       }
       
       image.src = url;
+    },
+    
+    buildImg: function(img) {
+      var dim = D.Display.getDimensions();
+      _clear();
+      _context.drawImage(img,0,0,dim.h * 0.75, dim.h *0.75);
+      return _getSwarm(true);
     }
     
   }
@@ -334,9 +382,10 @@ D.SwarmBuilder = (function() {
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
+// Swarm is the main external interface into the pixels
 D.Swarm = (function() {
   var pixels = [];
-  var type = D.hex;
+  var type = D.dot;
   
   function _birthPixel() {
     var dim = D.Display.getDimensions();
@@ -345,14 +394,14 @@ D.Swarm = (function() {
     return new D.Pixel(type, x, y, D.SwarmBuilder.getRadius());
   }
   
-  function _retirePixel() {
+  function _retirePixel(prejudice) {
     var dim = D.Display.getDimensions();
     var x = Math.random() * dim.w;
     var y = Math.random() * dim.h;
     var r = Math.random() * 20 + D.SwarmBuilder.getRadius()/2;
-    var d = new D.Pixel(type, x, y, r, new D.Color(78,108,68, Math.random() * 0.2));
-    d.talomere = Math.floor(Math.random() * 200) + 100;
-    
+    var d = new D.Pixel(D.hex, x, y, r, new D.Color(78,108,68, Math.random() * 0.2));
+    var deathrate = (prejudice>0) ? prejudice : 200;
+    d.talomere = Math.floor(Math.random() * deathrate + (deathrate/2));
     return d;
   }
   
@@ -404,7 +453,9 @@ D.Swarm = (function() {
           pixels[n].move(swarm[n]);
         }
         for (n = reuse; n < retire; n++) {
-          pixels[n].move(_retirePixel());
+          // If there are too many pixels to retire, make some die faster.
+          var prejudice = (retire-n) > 50 ? 50 : -1;
+          pixels[n].move(_retirePixel(prejudice));
         }
         
       } else {
@@ -443,13 +494,19 @@ D.Swarm = (function() {
     },
     
     img: function(url, cb) {
-      if (cb) {
-        D.SwarmBuilder.buildImg(url, function(s) {
-          D.Swarm.configureSwarm(s);cb();
-        });
+      if (typeof url === 'string') {
+        if (cb) {
+          D.SwarmBuilder.loadAndBuildImg(url, function(s) {
+            D.Swarm.configureSwarm(s);cb();
+          });
+        } else {
+          D.SwarmBuilder.loadAndBuildImg(url, D.Swarm.configureSwarm);
+        }
       } else {
-        D.SwarmBuilder.buildImg(url, D.Swarm.configureSwarm);
+        // Assume is an image object
+        D.Swarm.configureSwarm(D.SwarmBuilder.buildImg(url));
       }
+      
     }
   }    
 }());
@@ -460,6 +517,8 @@ D.Swarm = (function() {
 D.Scripts = (function() {
   var scripts = [];
   var index = 0;
+  var resources = {};
+  var loading = 0;
   
   
   function _run() {
@@ -469,25 +528,33 @@ D.Scripts = (function() {
     switch (scripts[index].cmd) {
       case 'text': 
         D.Swarm.text(scripts[index].value);
-        if (index <= scripts.length)
-          window.setTimeout(function() {_run()}, timeout);
+        window.setTimeout(function() {_run()}, timeout);
         break;
       case 'img' : 
-        D.Swarm.img(scripts[index].value, function() {
-          if (index <= scripts.length)
+        if (scripts[index].hasOwnProperty('id')) {
+          D.Swarm.img(resources[scripts[index].id]);
           window.setTimeout(function() {_run()}, timeout);
-        });
+        } else {
+          D.Swarm.img(scripts[index].value, function() {
+            window.setTimeout(function() {_run()}, timeout);
+          });
+        }
         break;
       case 'size': 
         D.Swarm.updateRadius(scripts[index].value);
-        if (index <= scripts.length)
-          window.setTimeout(function() {_run()}, timeout);
+        window.setTimeout(function() {_run()}, timeout);
         break;
       case 'pulse':
         D.Swarm.pulse(function(){
-          if (index <= scripts.length)
-            window.setTimeout(function() {_run()}, timeout);
+          window.setTimeout(function() {_run()}, timeout);
         });
+        break;
+      case 'play':
+        resources[scripts[index].id].play();
+        //if (scripts[index].from) {
+        //  resources[scripts[index].id].currentTime = scripts[index].from;
+        //}
+        window.setTimeout(function() {_run()}, 300);
         break;
       case 'enable':
          document.body.addEventListener('keydown', function (e) {
@@ -505,12 +572,65 @@ D.Scripts = (function() {
     
   }
   
+  
+  function _load(cb) {
+    for (var n=0; n< scripts.length; n++) {
+      switch (scripts[n].cmd) {
+        case 'img':
+          // Preload some resources for later use.
+          resources[scripts[n].id] = new Image();
+        
+          resources[scripts[n].id].onload = function() {
+            _loadDone(cb);
+          };
+          resources[scripts[n].id].onerror = function() {
+            _loadDone(cb);
+          }
+          resources[scripts[n].id].src = scripts[n].url;
+          break;
+        case 'audio':
+          resources[scripts[n].id] = new Audio();
+        
+          resources[scripts[n].id].onload = function() {
+            _loadDone(cb);
+          };
+          resources[scripts[n].id].oncanplay = function() {
+            _loadDone(cb);
+          };
+          
+          resources[scripts[n].id].onerror = function() {
+            _loadDone(cb);
+          }
+          resources[scripts[n].id].src = scripts[n].url;
+          resources[scripts[n].id].load();
+          break;
+      }
+    }
+  }
+  
+  function _loadDone(cb) {
+    loading -= 1;
+    if (loading <= 0) cb();
+  }
+  
+  
+  
   return {
+    // Run script
     run : function(s) {
       index = 0;
       scripts = s;
       _run();
-    }
+    },
+    
+    // Preload resources
+    load: function(s, cb) {
+      loading = s.length;
+      scripts = s;
+      _load(cb);
+    },
+    
+    r : function() {return resources}
   };
 }())
 
@@ -520,28 +640,72 @@ D.Scripts = (function() {
 
 
 // ----------------------------------------------------------------------------
-D.init();
+function ready() {
+  D.init();
 
-
-
-
-D.Scripts.run([
-  {cmd: 'text', value:'Hello'},
-  {cmd: 'text', value:"It's me"},
-  {cmd: 'size', value:4, timeout:300},
-  {cmd: 'img', value:'./sps.png'},
-  {cmd: 'size', value:6, timeout:300},
-  {cmd: 'text', value:"So..."},
-  {cmd: 'size', value:4, timeout:300},
-  {cmd: 'text', value:"Here's wishing you"},
-  {cmd: 'pulse'},
-  {cmd: 'text', value:'Happy Birthday!', timeout:5000},
-  {cmd: 'size', value:2, timeout:300},
-  {cmd: 'text', value:'<(oo)> '},
-  {cmd: 'img', value:'./djw4.png',timeout:10000},
-  {cmd: 'size', value:4, timeout:5000},
-  {cmd: 'text', value:'Type...'},
-  {cmd: 'enable'}
+  D.Scripts.run([
+    {cmd: 'play', id: 'track'},
+    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'text', value:'Hello'},
+    {cmd: 'text', value:'<(oo)>'},
+    {cmd: 'text', value:"It's me"},
+    
+    {cmd: 'size', value:4, timeout:300},
+    {cmd: 'img', id:'sps', timeout:6000},
+    
+    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'text', value:'Can you'},
+    {cmd: 'text', value:'guess...'},
+    
+    {cmd: 'size', value:30, timeout:300},
+    {cmd: 'img', id:'o1', timeout:8000},
+    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'text', value:'???'},
+    
+    {cmd: 'size', value:20, timeout:300},
+    {cmd: 'img', id:'o2', timeout:6000},
+    
+    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'text', value:'It is'},
+    {cmd: 'text', value:'something'},
+    {cmd: 'text', value:'in your home'},
+    
+    {cmd: 'size', value:15, timeout:300},
+    {cmd: 'img', id:'o2', timeout:2000},
+    {cmd: 'img', id:'o3', timeout:8000},
+    
+    {cmd: 'size', value:4, timeout:300},
+    {cmd: 'text', value:'more resolution'},
+    
+    {cmd: 'img', id:'o4', timeout:5000},
+    {cmd: 'size', value:5, timeout:5000},
+    
+    {cmd: 'size', value:4, timeout:300},
+    {cmd: 'text', value:'Olympic Poster'},
+    {cmd: 'text', value:'Bottom left'},
+    {cmd: 'text', value:'behind'},
+    {cmd: 'text', value:'Take a look...', timeout:3000},
+    
+    {cmd: 'size', value:2.5, timeout:300},
+    {cmd: 'img', id:'contemplate', timeout: 10000},
+    {cmd: 'img', id:'sps', timeout: 15000},
+   
+    {cmd: 'enable'}
   ]);
+  
+}
 
+function start() {
+D.Scripts.load([
+  {cmd:'audio',id:'track',url:'./Beethoven_7_2.mp3' },
+  //{cmd:'img',id:'djw',url:'./djw4.png' },
+  {cmd:'img',id:'sps',url:'./sps3.png' },
+  {cmd:'img',id:'contemplate',url:'./contemplate.png' },
+  {cmd:'img',id:'o1',url:'./o1.png' },
+  {cmd:'img',id:'o2',url:'./o2.png' },
+  {cmd:'img',id:'o3',url:'./o3.png' },
+  {cmd:'img',id:'o4',url:'./o4.png' },
+], ready);
+}
 
+start()
