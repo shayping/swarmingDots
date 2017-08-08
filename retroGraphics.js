@@ -376,8 +376,11 @@ D.SwarmBuilder = (function() {
       _clear();
       var w = Math.max(dim.h, dim.w) * 0.8;
       var h = Math.max(dim.h, dim.w) * 0.8;
-      var x = (img.width > w) ? 0 : (w - img.width)/2;
-      var y = (img.height > h) ? 0 : (h - img.height)/2;
+      //var x = (img.width > w) ? 0 : (w - img.width)/2;
+      //var y = (img.height > h) ? 0 : (h - img.height)/2;
+      var x = (dim.w - Math.max(dim.h, dim.w)) / 2;
+      var y = (dim.h - Math.max(dim.h, dim.w)) / 2;
+
       _context.drawImage(img,x,y,w,h);
       //_context.drawImage(img,0,0,dim.h * 0.75, dim.h *0.75);
       return _getSwarm(true);
@@ -462,7 +465,7 @@ D.Swarm = (function() {
         }
         for (n = reuse; n < retire; n++) {
           // If there are too many pixels to retire, make some die faster.
-          var prejudice = (retire-n) > 50 ? 50 : -1;
+          var prejudice = (retire-n) > 35 ? 10 : -1;
           pixels[n].move(_retirePixel(prejudice));
         }
         
@@ -659,44 +662,45 @@ function play() {
     {cmd: 'text', value:"It's me"},
     
     {cmd: 'size', value:4, timeout:300},
-    {cmd: 'img', id:'sps', timeout:6000},
+    {cmd: 'img', id:'sps', timeout:9000},
     
-    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'size', value:5, timeout:300},
     {cmd: 'text', value:'Can you'},
-    {cmd: 'text', value:'guess...'},
+    {cmd: 'text', value:'guess what'},
+    {cmd: 'text', value:'this is?'},
     
     {cmd: 'size', value:30, timeout:300},
     {cmd: 'img', id:'o1', timeout:8000},
     {cmd: 'size', value:6, timeout:300},
-    {cmd: 'text', value:'???'},
-    
+    {cmd: 'text', value:'No ???'},
+  
+    {cmd: 'text', value:'A bit more'},
     {cmd: 'size', value:20, timeout:300},
-    {cmd: 'img', id:'o2', timeout:6000},
+    {cmd: 'img', id:'o2', timeout:8000},
     
-    {cmd: 'size', value:6, timeout:300},
+    {cmd: 'size', value:4, timeout:300},
     {cmd: 'text', value:'It is'},
     {cmd: 'text', value:'something'},
     {cmd: 'text', value:'in your home'},
     
     {cmd: 'size', value:15, timeout:300},
-    {cmd: 'img', id:'o2', timeout:2000},
-    {cmd: 'img', id:'o3', timeout:8000},
+    {cmd: 'img', id:'o3', timeout:10000},
     
-    {cmd: 'size', value:4, timeout:300},
+    {cmd: 'size', value:2, timeout:300},
     {cmd: 'text', value:'more resolution'},
     
-    {cmd: 'img', id:'o4', timeout:5000},
-    {cmd: 'size', value:5, timeout:5000},
+    {cmd: 'size', value:8, timeout:300},
+    {cmd: 'img', id:'o4', timeout:12000},
     
-    {cmd: 'size', value:4, timeout:300},
+    {cmd: 'size', value:3, timeout:300},
     {cmd: 'text', value:'Olympic Poster'},
     {cmd: 'text', value:'Bottom left'},
     {cmd: 'text', value:'behind'},
     {cmd: 'text', value:'Take a look...', timeout:3000},
     
-    {cmd: 'size', value:2.5, timeout:300},
+    {cmd: 'size', value:6, timeout:300},
     {cmd: 'img', id:'contemplate', timeout: 10000},
-    {cmd: 'img', id:'sps', timeout: 15000},
+    // {cmd: 'img', id:'sps', timeout: 15000},
    
     {cmd: 'enable'}
   ]);
