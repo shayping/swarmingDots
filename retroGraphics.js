@@ -1,14 +1,15 @@
 
+/*global PIXI*/
 
 // =============================================================================
 // Dot matrix-esque renderer
-
 var D = {
   init: function () {
     // Perform any resource loading prior to calling init.
-    
     D.Display.init('.canvas');
-   
+    document.body.classList.remove('loader');
+    document.body.classList.add('ready');
+
     D.Display.render(function () {
       D.Swarm.render();
     });
@@ -29,14 +30,21 @@ D.Display = (function() {
                      function(callback) {
                        window.setTimeout(callback, 1000 / 60);
                      };
+  var app;
+      
   return {
     init: function (el) {
-      canvas = document.querySelector(el);
-      context = canvas.getContext('2d');
-      this.resizeCanvas();
+      //canvas = document.querySelector(el);
+      //context = canvas.getContext('2d');
+      //this.resizeCanvas();
+      app = new PIXI.Application(1000,1000, {antialias:true});
+    
+      document.body.appendChild(app.view);
+      this.resize();
 
       window.addEventListener('resize', function (e) {
-        D.Display.resizeCanvas();
+        //D.Display.resizeCanvas();
+        D.Display.resize();
       });
     },
     
@@ -52,24 +60,33 @@ D.Display = (function() {
       requestFrame.call(window, this.render.bind(this));
     },
 
-    resizeCanvas: function () {
+    XXXresizeCanvas: function () {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     },
+    
+    resize: function() {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    },
 
     clearDisplay: function () {
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      // context.clearRect(0, 0, canvas.width, canvas.height);
+     // app.renderer.clear();
     },
 
     getDimensions: function () {
-      return { w: canvas.width, h: canvas.height };
+      // return { w: canvas.width, h: canvas.height };
+      return {w : app.renderer.width, h: app.renderer.height};
     },
 
     drawPixel: function (fn) {
       // Each 'pixel' in Display isn't necessarily the same shape or size.
       // Each class that implements a pixel shape is responsible for providing
       // a function to draw itself, which will be passed into drawOject.
-      fn(context);
+      //fn(context);
+      var g = new PIXI.Graphics();
+      fn(app,g);
+      app.stage.addChild(g);
     }
   }
 }());
@@ -85,6 +102,14 @@ D.Color = function (r,g,b,a) {
 D.Color.prototype = {
   render: function() {
     return 'rgba(' + this.r + ',' +  + this.g + ',' + this.b + ',' + this.a + ')';
+  },
+  
+  color: function() {
+    return PIXI.utils.rgb2hex([this.r, this.g, this.b]);
+  },
+  
+  alpha: function() {
+    return this.a;
   }
 };
 
@@ -171,7 +196,7 @@ D.Pixel.prototype = {
     return {dx:dx, dy:dy, d:d};    
   },
   
-  _draw: function() {
+  _drawOLD: function() {
     D.Display.drawPixel(function(context) {
       var x = this.x + this.wobble[0];
       var y = this.y + this.wobble[1];
@@ -196,6 +221,18 @@ D.Pixel.prototype = {
       context.closePath(); 
       context.fill();
     }.bind(this))
+  },
+  
+  _draw: function() {
+    D.Display.drawPixel(function(app,g) {
+      var x = this.x + this.wobble[0];
+      var y = this.y + this.wobble[1];
+      
+      g.beginFill(this.c.color, this.c.alpha);
+      g.lineStyle(1, this.c.color, this.alpha);
+      g.drawCircle(x,y, this.r);
+      g.endFill();
+    }.bind(this));
   },
   
   
@@ -638,11 +675,11 @@ D.Scripts = (function() {
 
 
 // ----------------------------------------------------------------------------
-function play() {
+function ready() {
   D.init();
 
   D.Scripts.run([
-    {cmd: 'play', id: 'track'},
+ //   {cmd: 'play', id: 'track'},
     {cmd: 'size', value:6, timeout:300},
     {cmd: 'text', value:'Hello'},
     {cmd: 'text', value:'<(oo)>'},
@@ -693,21 +730,6 @@ function play() {
   
 }
 
-
-function ready() {
-    // Enable the play link
-    var start = document.querySelector('.start');
-    start.addEventListener('click', function (e) {
-        start.classList.add('hidden');
-        play();
-    });
-    
-    start.classList.remove('hidden');
-     document.body.classList.remove('loader');
-    document.body.classList.add('ready');
-
-}
-
 function start() {
 D.Scripts.load([
   {cmd:'audio',id:'track',url:'./Beethoven_7_2.mp3' },
@@ -721,4 +743,4 @@ D.Scripts.load([
 ], ready);
 }
 
-start();
+start()
